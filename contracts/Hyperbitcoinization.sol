@@ -37,11 +37,13 @@ contract Hyperbitcoinization {
     event USDCDeposited(address user, uint256 amount);
     event WBTCDeposited(address user, uint256 amount);
     event Claimed(address user, uint256 usdcAmount, uint256 wbtcAmount);
+    event WinnerSet(address winnerToken);
 
     error NotPending();
     error CapExceeded();
     error Locked();
     error NotFinished();
+    error Finished();
 
     constructor(
         address WBTC_,
@@ -91,6 +93,7 @@ contract Hyperbitcoinization {
     function claim(address to) external finished {
         if (claimed[msg.sender]) return;
         claimed[msg.sender] = true;
+
         uint256 usdcAmount;
         uint256 wbtcAmount;
 
@@ -102,12 +105,17 @@ contract Hyperbitcoinization {
     }
 
     function setWinnerToken() external {
+        if (winnerToken != address(0)) revert Finished();
         if (block.timestamp < END_TIMESTAMP) revert NotFinished();
+
         uint8 decimals = Oracle(oracle).decimals();
         uint256 answer = Oracle(oracle).latestAnswer();
         uint256 _1m = 1000000 * 10 ** decimals;
-        if (answer > _1m) winnerToken = WBTC;
+
+        if (answer >= _1m) winnerToken = WBTC;
         else winnerToken = USDC;
+
+        emit WinnerSet(winnerToken);
     }
 
     // =================== INTERNAL FUNCTIONS ===================

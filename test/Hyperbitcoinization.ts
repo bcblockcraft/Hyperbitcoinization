@@ -153,7 +153,7 @@ describe("HB", async () => {
   it("should finish the bet", async () => {
     await time.increase(DURATION);
     await oracle.mock.decimals.returns(8);
-    await oracle.mock.latestAnswer.returns(e8(1000000));
+    await oracle.mock.latestAnswer.returns(e8(1000000 - 1));
     await HB.setWinnerToken();
   });
 
