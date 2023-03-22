@@ -29,8 +29,11 @@ contract Hyperbitcoinization {
     mapping(address => uint256) public usdcBalance;
     mapping(address => uint256) public btcBalance;
 
-    uint256[] public usdcAccBalance;
-    mapping(address => AccDeposit[]) public accDeposit;
+    uint256[] public usdcAccumulator;
+    mapping(address => AccDeposit[]) public usdcDepositAccumulator;
+
+    uint256[] public btcAccumulator;
+    mapping(address => AccDeposit) public btcDepositAccumulator;
 
     uint256 public usdcTotalDeposits;
     uint256 public btcTotalDeposits;
@@ -61,7 +64,6 @@ contract Hyperbitcoinization {
         usdc = usdc_;
         oracle = oracle_;
         conversionRate = conversionRate_;
-
         endTimestamp = endTimestamp_;
     }
 
@@ -76,8 +78,12 @@ contract Hyperbitcoinization {
         usdcBalance[msg.sender] += amount;
         usdcTotalDeposits += amount;
 
-        _updateGlobalAcc(amount);
-        _updateUserAcc(amount);
+        uint256 globalAcc = _pushToGlobalAccumulator(amount, usdcAccumulator);
+        _pushToDepositAccumulator(
+            amount,
+            globalAcc,
+            usdcDepositAccumulator[msg.sender]
+        );
 
         emit UsdcDeposited(msg.sender, amount);
     }
@@ -93,7 +99,7 @@ contract Hyperbitcoinization {
         emit BtcDeposited(msg.sender, amount);
     }
 
-    // =================== CLAIM FUNCTION ===================
+    // =================== CLAIM FUNCTIONS ===================
 
     function claim(address to) external finished {
         if (claimed[msg.sender]) return;
@@ -123,16 +129,24 @@ contract Hyperbitcoinization {
 
     // =================== INTERNAL FUNCTIONS ===================
 
-    function _updateGlobalAcc(uint256 amount) internal {
-        uint256 len = usdcAccBalance.length;
-        if (len == 0) usdcAccBalance.push(amount);
-        else usdcAccBalance.push(usdcAccBalance[len - 1] + amount);
+    function _pushToGlobalAccumulator(
+        uint256 amount,
+        uint256[] storage accumulator
+    ) internal returns (uint256) {
+        uint256 len = accumulator.length;
+        if (len == 0) accumulator.push(amount);
+        else accumulator.push(accumulator[len - 1] + amount);
+
+        return accumulator[len];
     }
 
-    function _updateUserAcc(uint256 amount) internal {
-        AccDeposit[] storage _accDeposit = accDeposit[msg.sender];
+    function _pushToDepositAccumulator(
+        uint256 amount,
+        uint256 globalAcc,
+        AccDeposit[] storage _accDeposit
+    ) internal {
         uint256 len = _accDeposit.length;
-        uint256 usdcAcc = usdcAccBalance[usdcAccBalance.length - 1]; // must be updated before this call
+        uint256 usdcAcc = globalAcc;
         if (len == 0) {
             _accDeposit.push(AccDeposit(usdcAcc, amount, amount));
         } else {
@@ -167,7 +181,7 @@ contract Hyperbitcoinization {
     }
 
     function _usdcInBet(address user) internal view returns (uint256) {
-        AccDeposit[] memory _accDeposit = accDeposit[user];
+        AccDeposit[] memory _accDeposit = usdcDepositAccumulator[user];
         uint256 btcValue = btcTotalDeposits * conversionRate;
         uint256 len = _accDeposit.length;
         uint start = 0;

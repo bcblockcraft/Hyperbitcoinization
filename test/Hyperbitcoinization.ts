@@ -107,8 +107,8 @@ describe("HB", async () => {
       await HB.connect(users[0]).depositUsdc(amount);
       const balance = await HB.usdcBalance(users[0].address);
       const totalUsdc = await HB.usdcTotalDeposits();
-      const accUsdc = await HB.usdcAccBalance(0);
-      const accDeposit = await HB.accDeposit(users[0].address, 0);
+      const accUsdc = await HB.usdcAccumulator(0);
+      const accDeposit = await HB.usdcDepositAccumulator(users[0].address, 0);
 
       expect(balance).eq(amount);
       expect(totalUsdc).eq(amount);
@@ -125,7 +125,7 @@ describe("HB", async () => {
       const balance = await HB.usdcBalance(users[0].address);
       const totalUsdc = await HB.usdcTotalDeposits();
       // const accUsdc = await HB.usdcAccBalance(1);
-      const accDeposit = await HB.accDeposit(users[0].address, 1);
+      const accDeposit = await HB.usdcDepositAccumulator(users[0].address, 1);
 
       expect(balance).eq(amount.mul(2));
       expect(totalUsdc).eq(amount.mul(2));
@@ -213,8 +213,8 @@ describe("HB", async () => {
       await HB.connect(users[0]).depositUsdc(amount);
       const balance = await HB.usdcBalance(users[0].address);
       const totalUsdc = await HB.usdcTotalDeposits();
-      const accUsdc = await HB.usdcAccBalance(0);
-      const accDeposit = await HB.accDeposit(users[0].address, 0);
+      const accUsdc = await HB.usdcAccumulator(0);
+      const accDeposit = await HB.usdcDepositAccumulator(users[0].address, 0);
 
       expect(balance).eq(amount);
       expect(totalUsdc).eq(amount);
