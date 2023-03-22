@@ -2,8 +2,14 @@ import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { BigNumber, BigNumberish } from "ethers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { ERC20, Hyperbitcoinization } from "../typechain-types";
+import {
+  ERC20,
+  Hyperbitcoinization,
+  Hyperbitcoinization__factory,
+  Oracle__factory,
+} from "../typechain-types";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { deployMockContract, MockContract } from "ethereum-waffle";
 
 describe("HB", async () => {
   let WBTC: ERC20;
@@ -44,6 +50,7 @@ describe("HB", async () => {
     HB = await Factory.deploy(
       WBTC.address,
       USDC.address,
+      oracle.address,
       END_TIMESTAMP,
       CONVERSION_RATE
     );
@@ -61,6 +68,7 @@ describe("HB", async () => {
     users = await ethers.getSigners();
     main = users[0];
     END_TIMESTAMP = BigNumber.from(DURATION + (await time.latest())); // 90 days from now
+    oracle = await deployMockContract(main, Oracle__factory.abi);
     await deployWBTCAndUSDC();
     await deployHB();
   });
@@ -143,6 +151,9 @@ describe("HB", async () => {
   });
 
   it("should finish the bet", async () => {
+    await time.increase(DURATION);
+    await oracle.mock.decimals.returns(8);
+    await oracle.mock.latestAnswer.returns(e8(1000000));
     await HB.setWinnerToken();
   });
 
