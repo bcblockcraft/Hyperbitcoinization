@@ -161,6 +161,8 @@ contract Hyperbitcoinization {
     ) internal returns (uint256 usdcAmount, uint256 wbtcAmount) {
         wbtcAmount = btcBalance[msg.sender];
         usdcAmount = wbtcAmount * conversionRate;
+        uint256 usdcNotInBet = usdcBalance[msg.sender] - usdcInBet(msg.sender);
+        usdcAmount += usdcNotInBet;
         IERC20(usdc).safeTransfer(to, usdcAmount);
         IERC20(btc).safeTransfer(to, wbtcAmount);
     }

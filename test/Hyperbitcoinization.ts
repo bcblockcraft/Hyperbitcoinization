@@ -170,16 +170,16 @@ describe("HB", async () => {
     expect(afterWBTC.sub(beforeWBTC)).eq(e8(1));
   });
 
-  it("should should not let user 0 withdraw anything", async () => {
+  it("should let user 0 withdraw their remaining funds", async () => {
     const beforeWBTC = await WBTC.balanceOf(users[0].address);
     const beforeUSDC = await USDC.balanceOf(users[0].address);
 
-    await HB.connect(users[0]).claim(users[1].address);
+    await HB.connect(users[0]).claim(users[0].address);
 
     const afterWBTC = await WBTC.balanceOf(users[0].address);
     const afterUSDC = await USDC.balanceOf(users[0].address);
 
-    expect(afterUSDC.sub(beforeUSDC)).eq(0);
+    expect(afterUSDC.sub(beforeUSDC)).eq(e6(1000000));
     expect(afterWBTC.sub(beforeWBTC)).eq(0);
   });
 });
