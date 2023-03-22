@@ -64,16 +64,16 @@ describe("HB", async () => {
     });
   }
 
-  before(async () => {
+  async function setup() {
     users = await ethers.getSigners();
     main = users[0];
     END_TIMESTAMP = BigNumber.from(DURATION + (await time.latest())); // 90 days from now
     oracle = await deployMockContract(main, Oracle__factory.abi);
     await deployWBTCAndUSDC();
     await deployHB();
-  });
+  }
 
-  it("should have correctly setup HB", async () => {
+  async function testSetup() {
     const usdc = await HB.usdc();
     const wbtc = await HB.btc();
     const conversionRate = await HB.conversionRate();
@@ -83,103 +83,206 @@ describe("HB", async () => {
     expect(wbtc).eq(WBTC.address);
     expect(conversionRate).eq(CONVERSION_RATE);
     expect(endTimestamp).eq(END_TIMESTAMP);
+  }
+
+  describe("S 1", async () => {
+    before(async () => {
+      await setup();
+    });
+    it("should setup", async () => {
+      await testSetup();
+    });
+    it("should reject wbtc deposit", async () => {
+      const tx = HB.connect(users[0]).depositBtc(e8(1));
+      await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
+    });
+
+    it("should not be able to claim", async () => {
+      const tx = HB.connect(users[0]).claim(users[0].address);
+      await expect(tx).to.be.revertedWithCustomError(HB, "NotFinished");
+    });
+
+    it("should deposit usdc", async () => {
+      const amount = e6(1000000);
+      await HB.connect(users[0]).depositUsdc(amount);
+      const balance = await HB.usdcBalance(users[0].address);
+      const totalUsdc = await HB.usdcTotalDeposits();
+      const accUsdc = await HB.usdcAccBalance(0);
+      const accDeposit = await HB.accDeposit(users[0].address, 0);
+
+      expect(balance).eq(amount);
+      expect(totalUsdc).eq(amount);
+      expect(accUsdc).eq(amount);
+
+      expect(accDeposit.userAcc).eq(amount);
+      expect(accDeposit.globalAcc).eq(amount);
+      expect(accDeposit.deposit).eq(amount);
+    });
+
+    it("should make second deposit", async () => {
+      const amount = e6(1000000);
+      await HB.connect(users[0]).depositUsdc(amount);
+      const balance = await HB.usdcBalance(users[0].address);
+      const totalUsdc = await HB.usdcTotalDeposits();
+      // const accUsdc = await HB.usdcAccBalance(1);
+      const accDeposit = await HB.accDeposit(users[0].address, 1);
+
+      expect(balance).eq(amount.mul(2));
+      expect(totalUsdc).eq(amount.mul(2));
+      // expect(accUsdc).eq(amount.mul(2));
+
+      expect(accDeposit.userAcc).eq(amount.mul(2));
+      expect(accDeposit.globalAcc).eq(amount.mul(2));
+      expect(accDeposit.deposit).eq(amount);
+    });
+    it("should reject more than 2 btc deposits", async () => {
+      const tx = HB.connect(users[1]).depositBtc(e8(10));
+      await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
+    });
+    it("should return 0 used in bet", async () => {
+      const inBet = await HB.usdcInBet(users[0].address);
+      expect(inBet).eq(0);
+    });
+    it("should be able to deposit 1 btc", async () => {
+      const amount = e8(1);
+      await HB.connect(users[1]).depositBtc(amount);
+      const balance = await HB.btcBalance(users[1].address);
+      const totalWbtc = await HB.btcTotalDeposits();
+
+      expect(balance).eq(amount);
+      expect(totalWbtc).eq(amount);
+    });
+    it("should have 1m in bet", async () => {
+      const inBet = await HB.usdcInBet(users[0].address);
+      expect(inBet).eq(e6(1000000));
+    });
+
+    it("should finish the bet", async () => {
+      await time.increase(DURATION);
+      await oracle.mock.decimals.returns(8);
+      await oracle.mock.latestAnswer.returns(e8(1000000 - 1));
+      await HB.setWinnerToken();
+    });
+
+    it("should let user 1 get 1 WBTC and 1m USDC", async () => {
+      const beforeWBTC = await WBTC.balanceOf(users[1].address);
+      const beforeUSDC = await USDC.balanceOf(users[1].address);
+
+      await HB.connect(users[1]).claim(users[1].address);
+
+      const afterWBTC = await WBTC.balanceOf(users[1].address);
+      const afterUSDC = await USDC.balanceOf(users[1].address);
+
+      expect(afterUSDC.sub(beforeUSDC)).eq(e6(1000000));
+      expect(afterWBTC.sub(beforeWBTC)).eq(e8(1));
+    });
+
+    it("should let user 0 withdraw their remaining funds", async () => {
+      const beforeWBTC = await WBTC.balanceOf(users[0].address);
+      const beforeUSDC = await USDC.balanceOf(users[0].address);
+
+      await HB.connect(users[0]).claim(users[0].address);
+
+      const afterWBTC = await WBTC.balanceOf(users[0].address);
+      const afterUSDC = await USDC.balanceOf(users[0].address);
+
+      expect(afterUSDC.sub(beforeUSDC)).eq(e6(1000000));
+      expect(afterWBTC.sub(beforeWBTC)).eq(0);
+    });
   });
 
-  it("should reject wbtc deposit", async () => {
-    const tx = HB.connect(users[0]).depositBtc(e8(1));
-    await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
-  });
+  describe("S 2", async () => {
+    before(async () => {
+      await setup();
+    });
+    it("should setup", async () => {
+      await testSetup();
+    });
+    it("should reject wbtc deposit", async () => {
+      const tx = HB.connect(users[0]).depositBtc(e8(1));
+      await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
+    });
 
-  it("should not be able to claim", async () => {
-    const tx = HB.connect(users[0]).claim(users[0].address);
-    await expect(tx).to.be.revertedWithCustomError(HB, "NotFinished");
-  });
+    it("should not be able to claim", async () => {
+      const tx = HB.connect(users[0]).claim(users[0].address);
+      await expect(tx).to.be.revertedWithCustomError(HB, "NotFinished");
+    });
 
-  it("should deposit usdc", async () => {
-    const amount = e6(1000000);
-    await HB.connect(users[0]).depositUsdc(amount);
-    const balance = await HB.usdcBalance(users[0].address);
-    const totalUsdc = await HB.usdcTotalDeposits();
-    const accUsdc = await HB.usdcAccBalance(0);
-    const accDeposit = await HB.accDeposit(users[0].address, 0);
+    it("should deposit usdc", async () => {
+      const amount = e6(100000);
+      await HB.connect(users[0]).depositUsdc(amount);
+      const balance = await HB.usdcBalance(users[0].address);
+      const totalUsdc = await HB.usdcTotalDeposits();
+      const accUsdc = await HB.usdcAccBalance(0);
+      const accDeposit = await HB.accDeposit(users[0].address, 0);
 
-    expect(balance).eq(amount);
-    expect(totalUsdc).eq(amount);
-    expect(accUsdc).eq(amount);
+      expect(balance).eq(amount);
+      expect(totalUsdc).eq(amount);
+      expect(accUsdc).eq(amount);
 
-    expect(accDeposit.userAcc).eq(amount);
-    expect(accDeposit.globalAcc).eq(amount);
-    expect(accDeposit.deposit).eq(amount);
-  });
+      expect(accDeposit.userAcc).eq(amount);
+      expect(accDeposit.globalAcc).eq(amount);
+      expect(accDeposit.deposit).eq(amount);
+    });
 
-  it("should make second deposit", async () => {
-    const amount = e6(1000000);
-    await HB.connect(users[0]).depositUsdc(amount);
-    const balance = await HB.usdcBalance(users[0].address);
-    const totalUsdc = await HB.usdcTotalDeposits();
-    const accUsdc = await HB.usdcAccBalance(1);
-    const accDeposit = await HB.accDeposit(users[0].address, 1);
+    it("should make second deposit", async () => {
+      const amount = e6(1000000);
+      await HB.connect(users[5]).depositUsdc(e6(10000));
+      await HB.connect(users[0]).depositUsdc(amount);
+    });
+    it("should reject more than 2 btc deposits", async () => {
+      const tx = HB.connect(users[1]).depositBtc(e8(10));
+      await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
+    });
+    it("should return 0 used in bet", async () => {
+      const inBet = await HB.usdcInBet(users[0].address);
+      expect(inBet).eq(0);
+    });
+    it("should be able to deposit 1 btc", async () => {
+      const amount = e6(50);
+      await HB.connect(users[1]).depositBtc(amount);
+      const balance = await HB.btcBalance(users[1].address);
+      const totalWbtc = await HB.btcTotalDeposits();
 
-    expect(balance).eq(amount.mul(2));
-    expect(totalUsdc).eq(amount.mul(2));
-    expect(accUsdc).eq(amount.mul(2));
+      expect(balance).eq(amount);
+      expect(totalWbtc).eq(amount);
+    });
+    it("should have 1m in bet", async () => {
+      const inBet = await HB.usdcInBet(users[0].address);
+      expect(inBet).eq(e6(490000));
+    });
 
-    expect(accDeposit.userAcc).eq(amount.mul(2));
-    expect(accDeposit.globalAcc).eq(amount.mul(2));
-    expect(accDeposit.deposit).eq(amount);
-  });
-  it("should reject more than 2 btc deposits", async () => {
-    const tx = HB.connect(users[1]).depositBtc(e8(10));
-    await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
-  });
-  it("should return 0 used in bet", async () => {
-    const inBet = await HB.usdcInBet(users[0].address);
-    expect(inBet).eq(0);
-  });
-  it("should be able to deposit 1 btc", async () => {
-    const amount = e8(1);
-    await HB.connect(users[1]).depositBtc(amount);
-    const balance = await HB.btcBalance(users[1].address);
-    const totalWbtc = await HB.btcTotalDeposits();
+    it("should finish the bet", async () => {
+      await time.increase(DURATION);
+      await oracle.mock.decimals.returns(8);
+      await oracle.mock.latestAnswer.returns(e8(1000000 - 1));
+      await HB.setWinnerToken();
+    });
 
-    expect(balance).eq(amount);
-    expect(totalWbtc).eq(amount);
-  });
-  it("should have 1m in bet", async () => {
-    const inBet = await HB.usdcInBet(users[0].address);
-    expect(inBet).eq(e6(1000000));
-  });
+    it("should let user 0 get 1 WBTC and 1m USDC", async () => {
+      const beforeWBTC = await WBTC.balanceOf(users[1].address);
+      const beforeUSDC = await USDC.balanceOf(users[1].address);
 
-  it("should finish the bet", async () => {
-    await time.increase(DURATION);
-    await oracle.mock.decimals.returns(8);
-    await oracle.mock.latestAnswer.returns(e8(1000000 - 1));
-    await HB.setWinnerToken();
-  });
+      await HB.connect(users[1]).claim(users[1].address);
 
-  it("should let user 1 get 1 WBTC and 1m USDC", async () => {
-    const beforeWBTC = await WBTC.balanceOf(users[1].address);
-    const beforeUSDC = await USDC.balanceOf(users[1].address);
+      const afterWBTC = await WBTC.balanceOf(users[1].address);
+      const afterUSDC = await USDC.balanceOf(users[1].address);
 
-    await HB.connect(users[1]).claim(users[1].address);
+      expect(afterUSDC.sub(beforeUSDC)).eq(e6(500000));
+      expect(afterWBTC.sub(beforeWBTC)).eq(e6(50));
+    });
 
-    const afterWBTC = await WBTC.balanceOf(users[1].address);
-    const afterUSDC = await USDC.balanceOf(users[1].address);
+    it("should should not let user 1 withdraw anything", async () => {
+      const beforeWBTC = await WBTC.balanceOf(users[0].address);
+      const beforeUSDC = await USDC.balanceOf(users[0].address);
 
-    expect(afterUSDC.sub(beforeUSDC)).eq(e6(1000000));
-    expect(afterWBTC.sub(beforeWBTC)).eq(e8(1));
-  });
+      await HB.connect(users[0]).claim(users[0].address);
 
-  it("should let user 0 withdraw their remaining funds", async () => {
-    const beforeWBTC = await WBTC.balanceOf(users[0].address);
-    const beforeUSDC = await USDC.balanceOf(users[0].address);
+      const afterWBTC = await WBTC.balanceOf(users[0].address);
+      const afterUSDC = await USDC.balanceOf(users[0].address);
 
-    await HB.connect(users[0]).claim(users[0].address);
-
-    const afterWBTC = await WBTC.balanceOf(users[0].address);
-    const afterUSDC = await USDC.balanceOf(users[0].address);
-
-    expect(afterUSDC.sub(beforeUSDC)).eq(e6(1000000));
-    expect(afterWBTC.sub(beforeWBTC)).eq(0);
+      expect(afterUSDC.sub(beforeUSDC)).eq(e6(610000));
+      expect(afterWBTC.sub(beforeWBTC)).eq(0);
+    });
   });
 });
