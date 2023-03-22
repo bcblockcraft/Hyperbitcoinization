@@ -11,6 +11,7 @@ describe("HB", async () => {
   let HB: Hyperbitcoinization;
   let main: SignerWithAddress;
   let users: SignerWithAddress[];
+  let oracle: MockContract;
 
   const DURATION: number = time.duration.days(90);
   let END_TIMESTAMP: BigNumber;

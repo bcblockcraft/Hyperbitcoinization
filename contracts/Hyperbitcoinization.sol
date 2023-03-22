@@ -2,7 +2,7 @@
 pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "hardhat/console.sol";
+import "./interface/Oracle.sol";
 
 struct AccDeposit {
     uint256 globalAcc;
@@ -15,6 +15,7 @@ contract Hyperbitcoinization {
 
     address public immutable WBTC;
     address public immutable USDC;
+    address public immutable oracle;
 
     uint256 public immutable CONVERSION_RATE;
 
@@ -29,7 +30,7 @@ contract Hyperbitcoinization {
     uint256 public USDCTotalDeposits;
     uint256 public WBTCTotalDeposits;
 
-    address public winnerToken; // winnerToken = usdc if wbtcPrice > $1m else wbtc
+    address public winnerToken; // its 0 before END_TIMESTAMP. if btc price > $1m its WBTC. USDC otherwise;
 
     error NotPending();
     error CapExceeded();
@@ -39,12 +40,13 @@ contract Hyperbitcoinization {
     constructor(
         address WBTC_,
         address USDC_,
+        address ORACLE_,
         uint256 END_TIMESTAMP_,
         uint256 CONVERSION_RATE_
     ) {
         WBTC = WBTC_;
         USDC = USDC_;
-
+        oracle = ORACLE_;
         CONVERSION_RATE = CONVERSION_RATE_;
 
         END_TIMESTAMP = END_TIMESTAMP_;
@@ -122,7 +124,6 @@ contract Hyperbitcoinization {
                     return currentDeposit.userAcc - uint(remaining);
                 }
             } else if (WBTCValue > currentGlobalAcc) {
-                console.log("start", start);
                 start = mid + 1;
             } else {
                 end = mid - 1;
@@ -135,15 +136,20 @@ contract Hyperbitcoinization {
     function claim(address to) external finished {
         // user can claim USDC in proportion to WBTC deposit
         if (winnerToken == WBTC) {
+            _settleWBTC(msg.sender, to);
+        } else {
             _settleUSDC(msg.sender, to);
             _settleNotInBet(msg.sender, to);
-        } else {
-            _settleWBTC(msg.sender, to);
         }
     }
 
     function setWinnerToken() external {
-        winnerToken = WBTC;
+        if (block.timestamp < END_TIMESTAMP) revert NotFinished();
+        uint8 decimals = Oracle(oracle).decimals();
+        uint256 answer = Oracle(oracle).latestAnswer();
+        uint256 _1m = 1000000 * 10 ** decimals;
+        if (answer > _1m) winnerToken = WBTC;
+        else winnerToken = USDC;
     }
 
     function _settleUSDC(address user, address to) internal {
