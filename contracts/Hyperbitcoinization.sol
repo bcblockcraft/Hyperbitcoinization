@@ -97,38 +97,30 @@ contract Hyperbitcoinization {
         AccDeposit[] memory _accDeposit = accDeposit[user];
         uint256 WBTCValue = WBTCTotalDeposits * CONVERSION_RATE;
         uint256 len = _accDeposit.length;
-        int start = 0;
-        int end = int(len);
+        uint start = 0;
+        uint end = len;
 
-        while (start < end) {
-            int mid = (start + end) / 2;
+        while (start <= end) {
+            uint mid = (start + end) / 2;
 
-            AccDeposit memory currentDeposit = _accDeposit[uint(mid)];
+            AccDeposit memory currentDeposit = _accDeposit[mid];
             uint256 currentGlobalAcc = currentDeposit.globalAcc;
 
-            bool isFirstElementCondition = (mid == 0 &&
-                WBTCValue <= currentGlobalAcc);
-            bool isWithinRangeCondition = (WBTCValue <= currentGlobalAcc &&
-                WBTCValue > _accDeposit[uint(mid - 1)].globalAcc);
-
-            console.log(
-                WBTCValue,
-                currentGlobalAcc,
-                _accDeposit[uint(mid - 1)].globalAcc
-            );
-
-            if (isFirstElementCondition || isWithinRangeCondition) {
+            if (
+                (mid == 0 && WBTCValue <= currentGlobalAcc) ||
+                (WBTCValue <= currentGlobalAcc &&
+                    WBTCValue > _accDeposit[uint(mid - 1)].globalAcc)
+            ) {
                 int256 remaining = int(currentGlobalAcc) - int(WBTCValue);
-                console.log("found");
                 if (remaining < 0) {
                     return currentDeposit.userAcc - currentDeposit.deposit;
                 } else {
                     return currentDeposit.userAcc - uint(remaining);
                 }
             } else if (WBTCValue > currentGlobalAcc) {
-                start = int(mid + 1);
+                start = mid + 1;
             } else {
-                end = int(mid);
+                end = mid - 1;
             }
         }
 
