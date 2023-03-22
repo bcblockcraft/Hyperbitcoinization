@@ -288,7 +288,7 @@ contract Hyperbitcoinization {
 
     modifier onlyPending() {
         // end timestamp is not reached and system is not locked
-        if (block.timestamp <= endTimestamp) _;
+        if (block.timestamp <= endTimestamp || winnerToken == address(0)) _;
         else revert NotPending();
     }
 
