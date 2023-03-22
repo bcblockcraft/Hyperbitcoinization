@@ -110,16 +110,15 @@ contract Hyperbitcoinization {
 
     function setWinnerToken() external {
         if (winnerToken != address(0)) revert Finished();
-        if (block.timestamp < endTimestamp) revert NotFinished();
 
         uint8 decimals = Oracle(oracle).decimals();
         uint256 answer = Oracle(oracle).latestAnswer();
         uint256 _1m = 1000000 * 10 ** decimals;
 
         if (answer >= _1m) winnerToken = btc;
-        else winnerToken = usdc;
+        else if (endTimestamp <= block.timestamp) winnerToken = usdc;
 
-        emit WinnerSet(winnerToken);
+        if (winnerToken != address(0)) emit WinnerSet(winnerToken);
     }
 
     // =================== INTERNAL FUNCTIONS ===================
