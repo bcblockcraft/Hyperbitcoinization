@@ -32,6 +32,12 @@ contract Hyperbitcoinization {
 
     address public winnerToken; // its 0 before END_TIMESTAMP. if btc price > $1m its WBTC. USDC otherwise;
 
+    mapping(address => bool) public claimed;
+
+    event USDCDeposited(address user, uint256 amount);
+    event WBTCDeposited(address user, uint256 amount);
+    event Claimed(address user, uint256 usdcAmount, uint256 wbtcAmount);
+
     error NotPending();
     error CapExceeded();
     error Locked();
@@ -52,6 +58,10 @@ contract Hyperbitcoinization {
         END_TIMESTAMP = END_TIMESTAMP_;
     }
 
+    function USDCAmountInBet(address user) public view returns (uint256) {
+        return _amountInBet(user);
+    }
+
     // =================== DEPOSIT FUNCTIONS ===================
 
     function depositUSDC(uint256 amount) external onlyPending {
@@ -59,27 +69,10 @@ contract Hyperbitcoinization {
         USDCBalance[msg.sender] += amount;
         USDCTotalDeposits += amount;
 
-        // update global USDC deposits accumulator
-        uint256 globalAccLen = USDCAccBalance.length;
-        if (globalAccLen == 0) USDCAccBalance.push(amount);
-        else USDCAccBalance.push(USDCAccBalance[globalAccLen - 1] + amount);
+        _updateGlobalAcc(amount);
+        _updateUserAcc(amount);
 
-        // update user deposit accumulator
-        AccDeposit[] storage _accDeposit = accDeposit[msg.sender];
-        uint256 userAccLen = _accDeposit.length;
-        if (userAccLen == 0) {
-            _accDeposit.push(
-                AccDeposit(USDCAccBalance[globalAccLen], amount, amount)
-            );
-        } else {
-            _accDeposit.push(
-                AccDeposit(
-                    USDCAccBalance[globalAccLen],
-                    _accDeposit[userAccLen - 1].userAcc + amount,
-                    amount
-                )
-            );
-        }
+        emit USDCDeposited(msg.sender, amount);
     }
 
     function depositWBTC(uint256 amount) external onlyPending {
@@ -89,13 +82,78 @@ contract Hyperbitcoinization {
         IERC20(WBTC).safeTransferFrom(msg.sender, address(this), amount);
         WBTCBalance[msg.sender] += amount;
         WBTCTotalDeposits += amount;
+
+        emit WBTCDeposited(msg.sender, amount);
     }
 
-    // =================== CLAIM FUNCTIONS ===================
-    // these functions can be used to claim USDC/WBTC
-    // users can claim if bet is settled.
+    // =================== CLAIM FUNCTION ===================
 
-    function USDCAmountInBet(address user) public view returns (uint256) {
+    function claim(address to) external finished {
+        if (claimed[msg.sender]) return;
+        claimed[msg.sender] = true;
+        uint256 usdcAmount;
+        uint256 wbtcAmount;
+
+        if (winnerToken == WBTC)
+            (usdcAmount, wbtcAmount) = _keepUSDCTakeWBTC(to);
+        else (usdcAmount, wbtcAmount) = _keepWBTCTakeUSDC(to);
+
+        emit Claimed(msg.sender, usdcAmount, wbtcAmount);
+    }
+
+    function setWinnerToken() external {
+        if (block.timestamp < END_TIMESTAMP) revert NotFinished();
+        uint8 decimals = Oracle(oracle).decimals();
+        uint256 answer = Oracle(oracle).latestAnswer();
+        uint256 _1m = 1000000 * 10 ** decimals;
+        if (answer > _1m) winnerToken = WBTC;
+        else winnerToken = USDC;
+    }
+
+    // =================== INTERNAL FUNCTIONS ===================
+
+    function _updateGlobalAcc(uint256 amount) internal {
+        uint256 len = USDCAccBalance.length;
+        if (len == 0) USDCAccBalance.push(amount);
+        else USDCAccBalance.push(USDCAccBalance[len - 1] + amount);
+    }
+
+    function _updateUserAcc(uint256 amount) internal {
+        AccDeposit[] storage _accDeposit = accDeposit[msg.sender];
+        uint256 len = _accDeposit.length;
+        uint256 USDCAcc = USDCAccBalance[USDCAccBalance.length - 1]; // must be updated before this call
+        if (len == 0) {
+            _accDeposit.push(AccDeposit(USDCAcc, amount, amount));
+        } else {
+            _accDeposit.push(
+                AccDeposit(
+                    USDCAcc,
+                    _accDeposit[len - 1].userAcc + amount,
+                    amount
+                )
+            );
+        }
+    }
+
+    function _keepUSDCTakeWBTC(
+        address to
+    ) internal returns (uint256 usdcAmount, uint256 wbtcAmount) {
+        usdcAmount = USDCBalance[msg.sender];
+        wbtcAmount = _amountInBet(msg.sender) / CONVERSION_RATE;
+        IERC20(USDC).safeTransfer(to, usdcAmount);
+        IERC20(WBTC).safeTransfer(to, wbtcAmount);
+    }
+
+    function _keepWBTCTakeUSDC(
+        address to
+    ) internal returns (uint256 usdcAmount, uint256 wbtcAmount) {
+        wbtcAmount = WBTCBalance[msg.sender];
+        usdcAmount = wbtcAmount * CONVERSION_RATE;
+        IERC20(USDC).safeTransfer(to, usdcAmount);
+        IERC20(WBTC).safeTransfer(to, wbtcAmount);
+    }
+
+    function _amountInBet(address user) internal view returns (uint256) {
         AccDeposit[] memory _accDeposit = accDeposit[user];
         uint256 WBTCValue = WBTCTotalDeposits * CONVERSION_RATE;
         uint256 len = _accDeposit.length;
@@ -131,50 +189,6 @@ contract Hyperbitcoinization {
         }
 
         return 0;
-    }
-
-    function claim(address to) external finished {
-        // user can claim USDC in proportion to WBTC deposit
-        if (winnerToken == WBTC) {
-            _settleWBTC(msg.sender, to);
-        } else {
-            _settleUSDC(msg.sender, to);
-            _settleNotInBet(msg.sender, to);
-        }
-    }
-
-    function setWinnerToken() external {
-        if (block.timestamp < END_TIMESTAMP) revert NotFinished();
-        uint8 decimals = Oracle(oracle).decimals();
-        uint256 answer = Oracle(oracle).latestAnswer();
-        uint256 _1m = 1000000 * 10 ** decimals;
-        if (answer > _1m) winnerToken = WBTC;
-        else winnerToken = USDC;
-    }
-
-    function _settleUSDC(address user, address to) internal {
-        uint256 WBTCAmount = WBTCBalance[user];
-        uint256 USDCClaimAmount = WBTCAmount * CONVERSION_RATE;
-        WBTCBalance[user] = 0;
-        IERC20(USDC).safeTransfer(to, USDCClaimAmount);
-        IERC20(WBTC).safeTransfer(to, WBTCAmount);
-    }
-
-    function _settleWBTC(address user, address to) internal {
-        uint256 USDCAmount = USDCBalance[user];
-        if (USDCAmount == 0) return;
-        USDCBalance[user] = 0;
-        uint256 USDCInBet = USDCAmountInBet(user);
-        uint256 WBTCAmount = USDCInBet / CONVERSION_RATE;
-        IERC20(USDC).safeTransfer(to, USDCAmount);
-        IERC20(WBTC).safeTransfer(to, WBTCAmount);
-    }
-
-    function _settleNotInBet(address user, address to) internal {
-        uint256 USDCAmount = USDCBalance[user];
-        uint256 amount = USDCAmount - USDCAmountInBet(user);
-        USDCBalance[user] = 0;
-        IERC20(USDC).safeTransfer(to, amount);
     }
 
     // =================== MODIFIERS ===================
