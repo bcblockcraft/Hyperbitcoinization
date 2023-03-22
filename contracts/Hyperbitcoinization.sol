@@ -2,7 +2,12 @@
 pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interface/Oracle.sol";
+
+interface Oracle {
+    function latestAnswer() external returns (uint256);
+
+    function decimals() external returns (uint8);
+}
 
 struct AccDeposit {
     uint256 globalAcc;
@@ -30,7 +35,7 @@ contract Hyperbitcoinization {
     uint256 public usdcTotalDeposits;
     uint256 public btcTotalDeposits;
 
-    address public winnerToken; // its 0 before END_TIMESTAMP. if btc price > $1m its WBTC. USDC otherwise;
+    address public winnerToken; // its 0 before endTimestamp. if btc price > $1m its WBTC. USDC otherwise;
 
     mapping(address => bool) public claimed;
 
