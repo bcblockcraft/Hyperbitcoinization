@@ -74,10 +74,10 @@ describe("HB", async () => {
   });
 
   it("should have correctly setup HB", async () => {
-    const usdc = await HB.USDC();
-    const wbtc = await HB.WBTC();
-    const conversionRate = await HB.CONVERSION_RATE();
-    const endTimestamp = await HB.END_TIMESTAMP();
+    const usdc = await HB.usdc();
+    const wbtc = await HB.btc();
+    const conversionRate = await HB.conversionRate();
+    const endTimestamp = await HB.endTimestamp();
 
     expect(usdc).eq(USDC.address);
     expect(wbtc).eq(WBTC.address);
@@ -86,7 +86,7 @@ describe("HB", async () => {
   });
 
   it("should reject wbtc deposit", async () => {
-    const tx = HB.connect(users[0]).depositWBTC(e8(1));
+    const tx = HB.connect(users[0]).depositBtc(e8(1));
     await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
   });
 
@@ -97,10 +97,10 @@ describe("HB", async () => {
 
   it("should deposit usdc", async () => {
     const amount = e6(1000000);
-    await HB.connect(users[0]).depositUSDC(amount);
-    const balance = await HB.USDCBalance(users[0].address);
-    const totalUsdc = await HB.USDCTotalDeposits();
-    const accUsdc = await HB.USDCAccBalance(0);
+    await HB.connect(users[0]).depositUsdc(amount);
+    const balance = await HB.usdcBalance(users[0].address);
+    const totalUsdc = await HB.usdcTotalDeposits();
+    const accUsdc = await HB.usdcAccBalance(0);
     const accDeposit = await HB.accDeposit(users[0].address, 0);
 
     expect(balance).eq(amount);
@@ -114,10 +114,10 @@ describe("HB", async () => {
 
   it("should make second deposit", async () => {
     const amount = e6(1000000);
-    await HB.connect(users[0]).depositUSDC(amount);
-    const balance = await HB.USDCBalance(users[0].address);
-    const totalUsdc = await HB.USDCTotalDeposits();
-    const accUsdc = await HB.USDCAccBalance(1);
+    await HB.connect(users[0]).depositUsdc(amount);
+    const balance = await HB.usdcBalance(users[0].address);
+    const totalUsdc = await HB.usdcTotalDeposits();
+    const accUsdc = await HB.usdcAccBalance(1);
     const accDeposit = await HB.accDeposit(users[0].address, 1);
 
     expect(balance).eq(amount.mul(2));
@@ -129,24 +129,24 @@ describe("HB", async () => {
     expect(accDeposit.deposit).eq(amount);
   });
   it("should reject more than 2 btc deposits", async () => {
-    const tx = HB.connect(users[1]).depositWBTC(e8(10));
+    const tx = HB.connect(users[1]).depositBtc(e8(10));
     await expect(tx).to.be.revertedWithCustomError(HB, "CapExceeded");
   });
   it("should return 0 used in bet", async () => {
-    const inBet = await HB.USDCAmountInBet(users[0].address);
+    const inBet = await HB.usdcInBet(users[0].address);
     expect(inBet).eq(0);
   });
   it("should be able to deposit 1 btc", async () => {
     const amount = e8(1);
-    await HB.connect(users[1]).depositWBTC(amount);
-    const balance = await HB.WBTCBalance(users[1].address);
-    const totalWbtc = await HB.WBTCTotalDeposits();
+    await HB.connect(users[1]).depositBtc(amount);
+    const balance = await HB.btcBalance(users[1].address);
+    const totalWbtc = await HB.btcTotalDeposits();
 
     expect(balance).eq(amount);
     expect(totalWbtc).eq(amount);
   });
   it("should have 1m in bet", async () => {
-    const inBet = await HB.USDCAmountInBet(users[0].address);
+    const inBet = await HB.usdcInBet(users[0].address);
     expect(inBet).eq(e6(1000000));
   });
 

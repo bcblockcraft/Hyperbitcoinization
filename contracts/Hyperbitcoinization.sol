@@ -13,29 +13,29 @@ struct AccDeposit {
 contract Hyperbitcoinization {
     using SafeERC20 for IERC20;
 
-    address public immutable WBTC;
-    address public immutable USDC;
+    address public immutable btc;
+    address public immutable usdc;
     address public immutable oracle;
 
-    uint256 public immutable CONVERSION_RATE;
+    uint256 public immutable conversionRate;
 
-    uint256 public immutable END_TIMESTAMP;
+    uint256 public immutable endTimestamp;
 
-    mapping(address => uint256) public USDCBalance;
-    mapping(address => uint256) public WBTCBalance;
+    mapping(address => uint256) public usdcBalance;
+    mapping(address => uint256) public btcBalance;
 
-    uint256[] public USDCAccBalance;
+    uint256[] public usdcAccBalance;
     mapping(address => AccDeposit[]) public accDeposit;
 
-    uint256 public USDCTotalDeposits;
-    uint256 public WBTCTotalDeposits;
+    uint256 public usdcTotalDeposits;
+    uint256 public btcTotalDeposits;
 
     address public winnerToken; // its 0 before END_TIMESTAMP. if btc price > $1m its WBTC. USDC otherwise;
 
     mapping(address => bool) public claimed;
 
-    event USDCDeposited(address user, uint256 amount);
-    event WBTCDeposited(address user, uint256 amount);
+    event UsdcDeposited(address user, uint256 amount);
+    event BtcDeposited(address user, uint256 amount);
     event Claimed(address user, uint256 usdcAmount, uint256 wbtcAmount);
     event WinnerSet(address winnerToken);
 
@@ -46,46 +46,46 @@ contract Hyperbitcoinization {
     error Finished();
 
     constructor(
-        address WBTC_,
-        address USDC_,
-        address ORACLE_,
-        uint256 END_TIMESTAMP_,
-        uint256 CONVERSION_RATE_
+        address wbtc_,
+        address usdc_,
+        address oracle_,
+        uint256 endTimestamp_,
+        uint256 conversionRate_
     ) {
-        WBTC = WBTC_;
-        USDC = USDC_;
-        oracle = ORACLE_;
-        CONVERSION_RATE = CONVERSION_RATE_;
+        btc = wbtc_;
+        usdc = usdc_;
+        oracle = oracle_;
+        conversionRate = conversionRate_;
 
-        END_TIMESTAMP = END_TIMESTAMP_;
+        endTimestamp = endTimestamp_;
     }
 
-    function USDCAmountInBet(address user) public view returns (uint256) {
-        return _amountInBet(user);
+    function usdcInBet(address user) public view returns (uint256) {
+        return _usdcInBet(user);
     }
 
     // =================== DEPOSIT FUNCTIONS ===================
 
-    function depositUSDC(uint256 amount) external onlyPending {
-        IERC20(USDC).safeTransferFrom(msg.sender, address(this), amount);
-        USDCBalance[msg.sender] += amount;
-        USDCTotalDeposits += amount;
+    function depositUsdc(uint256 amount) external onlyPending {
+        IERC20(usdc).safeTransferFrom(msg.sender, address(this), amount);
+        usdcBalance[msg.sender] += amount;
+        usdcTotalDeposits += amount;
 
         _updateGlobalAcc(amount);
         _updateUserAcc(amount);
 
-        emit USDCDeposited(msg.sender, amount);
+        emit UsdcDeposited(msg.sender, amount);
     }
 
-    function depositWBTC(uint256 amount) external onlyPending {
-        uint256 btcValueAfter = (amount + WBTCTotalDeposits) * CONVERSION_RATE;
-        if (btcValueAfter > USDCTotalDeposits) revert CapExceeded();
+    function depositBtc(uint256 amount) external onlyPending {
+        uint256 btcValueAfter = (amount + btcTotalDeposits) * conversionRate;
+        if (btcValueAfter > usdcTotalDeposits) revert CapExceeded();
 
-        IERC20(WBTC).safeTransferFrom(msg.sender, address(this), amount);
-        WBTCBalance[msg.sender] += amount;
-        WBTCTotalDeposits += amount;
+        IERC20(btc).safeTransferFrom(msg.sender, address(this), amount);
+        btcBalance[msg.sender] += amount;
+        btcTotalDeposits += amount;
 
-        emit WBTCDeposited(msg.sender, amount);
+        emit BtcDeposited(msg.sender, amount);
     }
 
     // =================== CLAIM FUNCTION ===================
@@ -97,23 +97,22 @@ contract Hyperbitcoinization {
         uint256 usdcAmount;
         uint256 wbtcAmount;
 
-        if (winnerToken == WBTC)
-            (usdcAmount, wbtcAmount) = _keepUSDCTakeWBTC(to);
-        else (usdcAmount, wbtcAmount) = _keepWBTCTakeUSDC(to);
+        if (winnerToken == btc) (usdcAmount, wbtcAmount) = _keepUsdcTakeBtc(to);
+        else (usdcAmount, wbtcAmount) = _keepBtcTakeUsdc(to);
 
         emit Claimed(msg.sender, usdcAmount, wbtcAmount);
     }
 
     function setWinnerToken() external {
         if (winnerToken != address(0)) revert Finished();
-        if (block.timestamp < END_TIMESTAMP) revert NotFinished();
+        if (block.timestamp < endTimestamp) revert NotFinished();
 
         uint8 decimals = Oracle(oracle).decimals();
         uint256 answer = Oracle(oracle).latestAnswer();
         uint256 _1m = 1000000 * 10 ** decimals;
 
-        if (answer >= _1m) winnerToken = WBTC;
-        else winnerToken = USDC;
+        if (answer >= _1m) winnerToken = btc;
+        else winnerToken = usdc;
 
         emit WinnerSet(winnerToken);
     }
@@ -121,21 +120,21 @@ contract Hyperbitcoinization {
     // =================== INTERNAL FUNCTIONS ===================
 
     function _updateGlobalAcc(uint256 amount) internal {
-        uint256 len = USDCAccBalance.length;
-        if (len == 0) USDCAccBalance.push(amount);
-        else USDCAccBalance.push(USDCAccBalance[len - 1] + amount);
+        uint256 len = usdcAccBalance.length;
+        if (len == 0) usdcAccBalance.push(amount);
+        else usdcAccBalance.push(usdcAccBalance[len - 1] + amount);
     }
 
     function _updateUserAcc(uint256 amount) internal {
         AccDeposit[] storage _accDeposit = accDeposit[msg.sender];
         uint256 len = _accDeposit.length;
-        uint256 USDCAcc = USDCAccBalance[USDCAccBalance.length - 1]; // must be updated before this call
+        uint256 usdcAcc = usdcAccBalance[usdcAccBalance.length - 1]; // must be updated before this call
         if (len == 0) {
-            _accDeposit.push(AccDeposit(USDCAcc, amount, amount));
+            _accDeposit.push(AccDeposit(usdcAcc, amount, amount));
         } else {
             _accDeposit.push(
                 AccDeposit(
-                    USDCAcc,
+                    usdcAcc,
                     _accDeposit[len - 1].userAcc + amount,
                     amount
                 )
@@ -143,27 +142,27 @@ contract Hyperbitcoinization {
         }
     }
 
-    function _keepUSDCTakeWBTC(
+    function _keepUsdcTakeBtc(
         address to
     ) internal returns (uint256 usdcAmount, uint256 wbtcAmount) {
-        usdcAmount = USDCBalance[msg.sender];
-        wbtcAmount = _amountInBet(msg.sender) / CONVERSION_RATE;
-        IERC20(USDC).safeTransfer(to, usdcAmount);
-        IERC20(WBTC).safeTransfer(to, wbtcAmount);
+        usdcAmount = usdcBalance[msg.sender];
+        wbtcAmount = _usdcInBet(msg.sender) / conversionRate;
+        IERC20(usdc).safeTransfer(to, usdcAmount);
+        IERC20(btc).safeTransfer(to, wbtcAmount);
     }
 
-    function _keepWBTCTakeUSDC(
+    function _keepBtcTakeUsdc(
         address to
     ) internal returns (uint256 usdcAmount, uint256 wbtcAmount) {
-        wbtcAmount = WBTCBalance[msg.sender];
-        usdcAmount = wbtcAmount * CONVERSION_RATE;
-        IERC20(USDC).safeTransfer(to, usdcAmount);
-        IERC20(WBTC).safeTransfer(to, wbtcAmount);
+        wbtcAmount = btcBalance[msg.sender];
+        usdcAmount = wbtcAmount * conversionRate;
+        IERC20(usdc).safeTransfer(to, usdcAmount);
+        IERC20(btc).safeTransfer(to, wbtcAmount);
     }
 
-    function _amountInBet(address user) internal view returns (uint256) {
+    function _usdcInBet(address user) internal view returns (uint256) {
         AccDeposit[] memory _accDeposit = accDeposit[user];
-        uint256 WBTCValue = WBTCTotalDeposits * CONVERSION_RATE;
+        uint256 btcValue = btcTotalDeposits * conversionRate;
         uint256 len = _accDeposit.length;
         uint start = 0;
         uint end = len;
@@ -179,17 +178,17 @@ contract Hyperbitcoinization {
             uint256 currentGlobalAcc = currentDeposit.globalAcc;
 
             if (
-                (mid == 0 && WBTCValue <= currentGlobalAcc) ||
-                (WBTCValue <= currentGlobalAcc &&
-                    WBTCValue > _accDeposit[uint(mid - 1)].globalAcc)
+                (mid == 0 && btcValue <= currentGlobalAcc) ||
+                (btcValue <= currentGlobalAcc &&
+                    btcValue > _accDeposit[uint(mid - 1)].globalAcc)
             ) {
-                int256 remaining = int(currentGlobalAcc) - int(WBTCValue);
+                int256 remaining = int(currentGlobalAcc) - int(btcValue);
                 if (remaining < 0) {
                     return currentDeposit.userAcc - currentDeposit.deposit;
                 } else {
                     return currentDeposit.userAcc - uint(remaining);
                 }
-            } else if (WBTCValue > currentGlobalAcc) {
+            } else if (btcValue > currentGlobalAcc) {
                 start = mid + 1;
             } else {
                 end = mid - 1;
@@ -203,7 +202,7 @@ contract Hyperbitcoinization {
 
     modifier onlyPending() {
         // end timestamp is not reached and system is not locked
-        if (block.timestamp <= END_TIMESTAMP) _;
+        if (block.timestamp <= endTimestamp) _;
         else revert NotPending();
     }
 
