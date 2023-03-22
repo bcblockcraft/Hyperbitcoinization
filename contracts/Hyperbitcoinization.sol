@@ -111,6 +111,7 @@ contract Hyperbitcoinization {
                 (WBTCValue <= currentGlobalAcc &&
                     WBTCValue > _accDeposit[uint(mid - 1)].globalAcc)
             ) {
+                console.log("found");
                 int256 remaining = int(currentGlobalAcc) - int(WBTCValue);
                 if (remaining < 0) {
                     return currentDeposit.userAcc - currentDeposit.deposit;
@@ -131,9 +132,14 @@ contract Hyperbitcoinization {
         // user can claim USDC in proportion to WBTC deposit
         if (winnerToken == WBTC) {
             _settleUSDC(msg.sender, to);
+            _settleNotInBet(msg.sender, to);
         } else {
             _settleWBTC(msg.sender, to);
         }
+    }
+
+    function setWinnerToken() external {
+        winnerToken = WBTC;
     }
 
     function _settleUSDC(address user, address to) internal {
@@ -152,6 +158,13 @@ contract Hyperbitcoinization {
         uint256 WBTCAmount = USDCInBet / CONVERSION_RATE;
         IERC20(USDC).safeTransfer(to, USDCAmount);
         IERC20(WBTC).safeTransfer(to, WBTCAmount);
+    }
+
+    function _settleNotInBet(address user, address to) internal {
+        uint256 USDCAmount = USDCBalance[user];
+        uint256 amount = USDCAmount - USDCAmountInBet(user);
+        USDCBalance[user] = 0;
+        IERC20(USDC).safeTransfer(to, amount);
     }
 
     // =================== MODIFIERS ===================

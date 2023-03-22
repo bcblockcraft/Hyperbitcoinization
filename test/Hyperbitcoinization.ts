@@ -140,4 +140,34 @@ describe("HB", async () => {
     const inBet = await HB.USDCAmountInBet(users[0].address);
     expect(inBet).eq(e6(1000000));
   });
+
+  it("should finish the bet", async () => {
+    await HB.setWinnerToken();
+  });
+
+  it("should let user 1 get 1 WBTC and 1m USDC", async () => {
+    const beforeWBTC = await WBTC.balanceOf(users[1].address);
+    const beforeUSDC = await USDC.balanceOf(users[1].address);
+
+    await HB.connect(users[1]).claim(users[1].address);
+
+    const afterWBTC = await WBTC.balanceOf(users[1].address);
+    const afterUSDC = await USDC.balanceOf(users[1].address);
+
+    expect(afterUSDC.sub(beforeUSDC)).eq(e6(1000000));
+    expect(afterWBTC.sub(beforeWBTC)).eq(e8(1));
+  });
+
+  it("should should not let user 0 withdraw anything", async () => {
+    const beforeWBTC = await WBTC.balanceOf(users[0].address);
+    const beforeUSDC = await USDC.balanceOf(users[0].address);
+
+    await HB.connect(users[0]).claim(users[1].address);
+
+    const afterWBTC = await WBTC.balanceOf(users[0].address);
+    const afterUSDC = await USDC.balanceOf(users[0].address);
+
+    expect(afterUSDC.sub(beforeUSDC)).eq(0);
+    expect(afterWBTC.sub(beforeWBTC)).eq(0);
+  });
 });
