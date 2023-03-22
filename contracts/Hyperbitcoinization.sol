@@ -20,7 +20,7 @@ library AccUtils {
     function globalAccValue(
         AccDeposit memory accDeposit,
         uint256 conversionRate
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         if (accDeposit.isUsdc) return accDeposit.globalAcc;
         return accDeposit.globalAcc * conversionRate;
     }

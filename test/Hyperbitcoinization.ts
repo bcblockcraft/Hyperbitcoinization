@@ -5,7 +5,6 @@ import { ethers } from "hardhat";
 import {
   ERC20,
   Hyperbitcoinization,
-  Hyperbitcoinization__factory,
   Oracle__factory,
 } from "../typechain-types";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
@@ -40,8 +39,8 @@ describe("HB", async () => {
     await USDC.deployed();
 
     users.forEach(async (user) => {
-      await WBTC.connect(main).transfer(user.address, e8(100));
-      await USDC.connect(main).transfer(user.address, e6(10000000));
+      await WBTC.connect(main).transfer(user.address, e8(1000000000));
+      await USDC.connect(main).transfer(user.address, e6(10000000000000));
     });
   }
 
@@ -55,9 +54,10 @@ describe("HB", async () => {
       CONVERSION_RATE
     );
     await HB.deployed();
+
     users.forEach(async (user) => {
       const wbtcBalance = await WBTC.balanceOf(user.address);
-      const usdcBalance = await WBTC.balanceOf(user.address);
+      const usdcBalance = await USDC.balanceOf(user.address);
 
       await WBTC.connect(user).approve(HB.address, wbtcBalance);
       await USDC.connect(user).approve(HB.address, usdcBalance);
@@ -200,6 +200,34 @@ describe("HB", async () => {
 
       expect(afterUSDC.sub(beforeUSDC)).eq(e6(1000000));
       expect(afterWBTC.sub(beforeWBTC)).eq(e8(1));
+    });
+  });
+
+  describe("S 2", async () => {
+    before(async () => {
+      await setup();
+    });
+    it("should calculate usdc amount in bet", async () => {
+      await HB.connect(users[0]).depositUsdc(e6(10000000));
+      await HB.connect(users[1]).depositUsdc(e6(7000000));
+      await HB.connect(users[2]).depositUsdc(e6(8000000));
+      await HB.connect(users[0]).depositUsdc(e6(5000000));
+      await HB.connect(users[3]).depositUsdc(e6(10000000));
+      await HB.connect(users[0]).depositUsdc(e6(15000000));
+      await HB.connect(users[0]).depositUsdc(e6(5000000));
+
+      await HB.connect(users[4]).depositBtc(e8(7));
+      expect(await HB.usdcInBet(users[0].address)).eq(e6(7000000));
+      await HB.connect(users[4]).depositBtc(e8(13));
+      expect(await HB.usdcInBet(users[0].address)).eq(e6(10000000));
+      await HB.connect(users[4]).depositBtc(e8(7));
+      expect(await HB.usdcInBet(users[0].address)).eq(e6(12000000));
+      await HB.connect(users[4]).depositBtc(e8(3));
+      expect(await HB.usdcInBet(users[0].address)).eq(e6(15000000));
+      await HB.connect(users[4]).depositBtc(e8(15));
+      expect(await HB.usdcInBet(users[0].address)).eq(e6(20000000));
+      await HB.connect(users[4]).depositBtc(e8(12));
+      expect(await HB.usdcInBet(users[0].address)).eq(e6(32000000));
     });
   });
 });
