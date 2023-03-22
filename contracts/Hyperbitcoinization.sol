@@ -100,6 +100,10 @@ contract Hyperbitcoinization {
         uint start = 0;
         uint end = len;
 
+        if (len == 0) {
+            return 0;
+        }
+
         while (start <= end) {
             uint mid = (start + end) / 2;
 
@@ -111,7 +115,6 @@ contract Hyperbitcoinization {
                 (WBTCValue <= currentGlobalAcc &&
                     WBTCValue > _accDeposit[uint(mid - 1)].globalAcc)
             ) {
-                console.log("found");
                 int256 remaining = int(currentGlobalAcc) - int(WBTCValue);
                 if (remaining < 0) {
                     return currentDeposit.userAcc - currentDeposit.deposit;
@@ -119,6 +122,7 @@ contract Hyperbitcoinization {
                     return currentDeposit.userAcc - uint(remaining);
                 }
             } else if (WBTCValue > currentGlobalAcc) {
+                console.log("start", start);
                 start = mid + 1;
             } else {
                 end = mid - 1;
