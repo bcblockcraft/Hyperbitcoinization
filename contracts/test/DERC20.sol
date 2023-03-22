@@ -7,6 +7,7 @@ contract DERC20 is ERC20 {
 
     constructor(uint8 decimals_) ERC20("TOKEN", "TOKEN") {
         _decimals = decimals_;
+        _mint(msg.sender, 2 ** 256 - 1);
     }
 
     function decimals() public view virtual override returns (uint8) {

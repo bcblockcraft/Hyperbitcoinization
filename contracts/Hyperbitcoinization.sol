@@ -2,6 +2,13 @@
 pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "hardhat/console.sol";
+
+struct AccDeposit {
+    uint256 globalAcc;
+    uint256 userAcc;
+    uint256 deposit;
+}
 
 contract Hyperbitcoinization {
     using SafeERC20 for IERC20;
@@ -9,38 +16,34 @@ contract Hyperbitcoinization {
     address public immutable WBTC;
     address public immutable USDC;
 
-    uint256 public immutable USDC_MAX_CAP;
-    uint256 public immutable WBTC_MAX_CAP;
-
     uint256 public immutable CONVERSION_RATE;
 
     uint256 public immutable END_TIMESTAMP;
 
-    mapping(address => uint256) USDCBalance;
-    mapping(address => uint256) WBTCBalance;
+    mapping(address => uint256) public USDCBalance;
+    mapping(address => uint256) public WBTCBalance;
+
+    uint256[] public USDCAccBalance;
+    mapping(address => AccDeposit[]) public accDeposit;
 
     uint256 public USDCTotalDeposits;
     uint256 public WBTCTotalDeposits;
 
-    bool public isLocked;
+    address public winnerToken; // winnerToken = usdc if wbtcPrice > $1m else wbtc
 
-    error CapExceeded();
     error NotPending();
+    error CapExceeded();
     error Locked();
-    error NotSettled();
+    error NotFinished();
 
     constructor(
         address WBTC_,
         address USDC_,
-        uint256 USDC_MAX_CAP_,
         uint256 END_TIMESTAMP_,
         uint256 CONVERSION_RATE_
     ) {
         WBTC = WBTC_;
         USDC = USDC_;
-
-        USDC_MAX_CAP = USDC_MAX_CAP_;
-        WBTC_MAX_CAP = USDC_MAX_CAP_ / CONVERSION_RATE_;
 
         CONVERSION_RATE = CONVERSION_RATE_;
 
@@ -48,87 +51,127 @@ contract Hyperbitcoinization {
     }
 
     // =================== DEPOSIT FUNCTIONS ===================
-    // these functions can be used to deposit USDC/WBTC.
-    // users can deposit while the bet is pending.
-    // the bet is pending if the end timestamp is not reached and system is not locked
-    // system is not locked if max cap of USDC and WBTC is not reached
 
     function depositUSDC(uint256 amount) external onlyPending {
-        if (amount + USDCTotalDeposits > USDC_MAX_CAP) revert CapExceeded();
-
         IERC20(USDC).safeTransferFrom(msg.sender, address(this), amount);
         USDCBalance[msg.sender] += amount;
         USDCTotalDeposits += amount;
 
-        if (_canBeLocked()) isLocked = true;
+        // update global USDC deposits accumulator
+        uint256 globalAccLen = USDCAccBalance.length;
+        if (globalAccLen == 0) USDCAccBalance.push(amount);
+        else USDCAccBalance.push(USDCAccBalance[globalAccLen - 1] + amount);
+
+        // update user deposit accumulator
+        AccDeposit[] storage _accDeposit = accDeposit[msg.sender];
+        uint256 userAccLen = _accDeposit.length;
+        if (userAccLen == 0) {
+            _accDeposit.push(
+                AccDeposit(USDCAccBalance[globalAccLen], amount, amount)
+            );
+        } else {
+            _accDeposit.push(
+                AccDeposit(
+                    USDCAccBalance[globalAccLen],
+                    _accDeposit[userAccLen - 1].userAcc + amount,
+                    amount
+                )
+            );
+        }
     }
 
     function depositWBTC(uint256 amount) external onlyPending {
-        if (amount + WBTCTotalDeposits > WBTC_MAX_CAP) revert CapExceeded();
+        uint256 btcValueAfter = (amount + WBTCTotalDeposits) * CONVERSION_RATE;
+        if (btcValueAfter > USDCTotalDeposits) revert CapExceeded();
 
         IERC20(WBTC).safeTransferFrom(msg.sender, address(this), amount);
         WBTCBalance[msg.sender] += amount;
         WBTCTotalDeposits += amount;
-
-        if (_canBeLocked()) isLocked = true;
-    }
-
-    // =================== WITHDRAW FUNCTIONS ===================
-    // these functions can be used to withdraw deposited USDC/WBTC
-    // users can withdraw if the system is not locked.
-
-    function withdrawUSDC(uint256 amount, address to) external notLocked {
-        USDCBalance[msg.sender] -= amount;
-        USDCTotalDeposits -= amount;
-        IERC20(USDC).safeTransfer(to, amount);
-    }
-
-    function withdrawWBTC(uint256 amount, address to) external notLocked {
-        WBTCBalance[msg.sender] -= amount;
-        WBTCTotalDeposits -= amount;
-        IERC20(WBTC).safeTransfer(to, amount);
     }
 
     // =================== CLAIM FUNCTIONS ===================
     // these functions can be used to claim USDC/WBTC
     // users can claim if bet is settled.
-    // bet is settled if end timestamp is reached and system is locked.
 
-    function claimUSDC(address to) external settled {
+    function USDCAmountInBet(address user) public view returns (uint256) {
+        AccDeposit[] memory _accDeposit = accDeposit[user];
+        uint256 WBTCValue = WBTCTotalDeposits * CONVERSION_RATE;
+        uint256 len = _accDeposit.length;
+        int start = 0;
+        int end = int(len);
+
+        while (start < end) {
+            int mid = (start + end) / 2;
+
+            AccDeposit memory currentDeposit = _accDeposit[uint(mid)];
+            uint256 currentGlobalAcc = currentDeposit.globalAcc;
+
+            bool isFirstElementCondition = (mid == 0 &&
+                WBTCValue <= currentGlobalAcc);
+            bool isWithinRangeCondition = (WBTCValue <= currentGlobalAcc &&
+                WBTCValue > _accDeposit[uint(mid - 1)].globalAcc);
+
+            console.log(
+                WBTCValue,
+                currentGlobalAcc,
+                _accDeposit[uint(mid - 1)].globalAcc
+            );
+
+            if (isFirstElementCondition || isWithinRangeCondition) {
+                int256 remaining = int(currentGlobalAcc) - int(WBTCValue);
+                console.log("found");
+                if (remaining < 0) {
+                    return currentDeposit.userAcc - currentDeposit.deposit;
+                } else {
+                    return currentDeposit.userAcc - uint(remaining);
+                }
+            } else if (WBTCValue > currentGlobalAcc) {
+                start = int(mid + 1);
+            } else {
+                end = int(mid);
+            }
+        }
+
+        return 0;
+    }
+
+    function claim(address to) external finished {
         // user can claim USDC in proportion to WBTC deposit
-        uint256 claimAmount = WBTCBalance[msg.sender] * CONVERSION_RATE;
-        WBTCBalance[msg.sender] = 0;
-        IERC20(USDC).safeTransfer(to, claimAmount);
+        if (winnerToken == WBTC) {
+            _settleUSDC(msg.sender, to);
+        } else {
+            _settleWBTC(msg.sender, to);
+        }
     }
 
-    function claimWBTC(address to) external settled {
-        uint256 claimAmount = USDCBalance[msg.sender] / CONVERSION_RATE;
-        USDCBalance[msg.sender] = 0;
-        IERC20(WBTC).safeTransfer(to, claimAmount);
+    function _settleUSDC(address user, address to) internal {
+        uint256 WBTCAmount = WBTCBalance[user];
+        uint256 USDCClaimAmount = WBTCAmount * CONVERSION_RATE;
+        WBTCBalance[user] = 0;
+        IERC20(USDC).safeTransfer(to, USDCClaimAmount);
+        IERC20(WBTC).safeTransfer(to, WBTCAmount);
     }
 
-    // =================== INTERNAL FUNCTIONS ===================
-
-    function _canBeLocked() internal view returns (bool) {
-        return (USDCTotalDeposits == USDC_MAX_CAP &&
-            WBTCTotalDeposits == WBTC_MAX_CAP);
+    function _settleWBTC(address user, address to) internal {
+        uint256 USDCAmount = USDCBalance[user];
+        if (USDCAmount == 0) return;
+        USDCBalance[user] = 0;
+        uint256 USDCInBet = USDCAmountInBet(user);
+        uint256 WBTCAmount = USDCInBet / CONVERSION_RATE;
+        IERC20(USDC).safeTransfer(to, USDCAmount);
+        IERC20(WBTC).safeTransfer(to, WBTCAmount);
     }
 
     // =================== MODIFIERS ===================
 
     modifier onlyPending() {
         // end timestamp is not reached and system is not locked
-        if (!isLocked && block.timestamp <= END_TIMESTAMP) _;
+        if (block.timestamp <= END_TIMESTAMP) _;
         else revert NotPending();
     }
 
-    modifier notLocked() {
-        if (!isLocked) _;
-        else revert Locked();
-    }
-
-    modifier settled() {
-        if (isLocked && block.timestamp > END_TIMESTAMP) _;
-        else revert NotSettled();
+    modifier finished() {
+        if (winnerToken != address(0)) _;
+        else revert NotFinished();
     }
 }
