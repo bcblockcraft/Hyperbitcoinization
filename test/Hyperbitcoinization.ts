@@ -257,4 +257,26 @@ describe("HB", async () => {
       expect(await HB.btcInBet(users[0].address)).eq(e8(32));
     });
   });
+  describe("S 4", async () => {
+    before(async () => {
+      await setup();
+    });
+    it("should deposit wbtc", async () => {
+      await HB.connect(main).depositBtc(e8(1));
+    });
+
+    it("should finish", async () => {
+      await oracle.mock.decimals.returns(8);
+      await oracle.mock.latestAnswer.returns(e8(1100000));
+      await HB.setWinnerToken();
+    });
+
+    it("should claim 1 WBTC", async () => {
+      const before = await WBTC.balanceOf(main.address);
+      await HB.connect(main).claim(main.address);
+
+      const after = await WBTC.balanceOf(main.address);
+      expect(after.sub(before)).eq(e8(1));
+    });
+  });
 });
