@@ -230,4 +230,31 @@ describe("HB", async () => {
       expect(await HB.usdcInBet(users[0].address)).eq(e6(32000000));
     });
   });
+  describe("S 3", async () => {
+    before(async () => {
+      await setup();
+    });
+    it("should calculate btc amount in bet", async () => {
+      await HB.connect(users[0]).depositBtc(e8(10));
+      await HB.connect(users[1]).depositBtc(e8(7));
+      await HB.connect(users[2]).depositBtc(e8(8));
+      await HB.connect(users[0]).depositBtc(e8(5));
+      await HB.connect(users[3]).depositBtc(e8(10));
+      await HB.connect(users[0]).depositBtc(e8(15));
+      await HB.connect(users[0]).depositBtc(e8(5));
+
+      await HB.connect(users[4]).depositUsdc(e6(7000000));
+      expect(await HB.btcInBet(users[0].address)).eq(e8(7));
+      await HB.connect(users[4]).depositUsdc(e6(13000000));
+      expect(await HB.btcInBet(users[0].address)).eq(e8(10));
+      await HB.connect(users[4]).depositUsdc(e6(7000000));
+      expect(await HB.btcInBet(users[0].address)).eq(e8(12));
+      await HB.connect(users[4]).depositUsdc(e6(3000000));
+      expect(await HB.btcInBet(users[0].address)).eq(e8(15));
+      await HB.connect(users[4]).depositUsdc(e6(15000000));
+      expect(await HB.btcInBet(users[0].address)).eq(e8(20));
+      await HB.connect(users[4]).depositUsdc(e6(12000000));
+      expect(await HB.btcInBet(users[0].address)).eq(e8(32));
+    });
+  });
 });
