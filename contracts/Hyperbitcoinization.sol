@@ -40,7 +40,7 @@ contract Hyperbitcoinization {
         USDC = USDC_;
 
         USDC_MAX_CAP = USDC_MAX_CAP_;
-        WBTC_MAX_CAP = USDC_MAX_CAP_ * CONVERSION_RATE_;
+        WBTC_MAX_CAP = USDC_MAX_CAP_ / CONVERSION_RATE_;
 
         CONVERSION_RATE = CONVERSION_RATE_;
 
